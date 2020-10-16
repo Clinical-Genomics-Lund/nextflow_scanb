@@ -1,0 +1,11 @@
+name: scanb
+channels:
+  - bioconda
+
+dependencies:
+  - bowtie2=2.4.2
+  - fastp=0.20.1
+  - hisat2=2.2.1
+  - picard=2.23.8
+  - samtools=1.11
+  - stringtie=2.1.4
