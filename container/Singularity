@@ -1,17 +1,17 @@
 Bootstrap: docker
-From: nfcore/base:1.9
+From: nfcore/base:1.10.2
 
 %files
     environment.yml /
-    /data/bnf/sw/sentieon/sentieon-genomics-201911 /opt
+    /data/bnf/sw/sentieon/sentieon-genomics-201911/bin /opt
 
 %post
     /opt/conda/bin/conda env create -f /environment.yml
-    /opt/conda/bin clean -a
+    /opt/conda/bin/conda clean --all
+    /opt/conda/bin/conda init bash
 
 %environment
-	PATH=/opt/conda/envs/scanb/bin:/opt/sentieon-genomics-201911/bin/:/opt/bin:/opt/conda/envs/py3-env/bin:$PATH
-    PICARD_HOME=/opt/conda/envs/CMD-WGS/share/picard-2.23.8/
+	PATH=/opt/conda/envs/scanb/bin:/opt/sentieon-genomics-201911/bin/:/opt/bin:$PATH
 
 %labels
     MAINTAINER Markus Johansson <markus.h.johansson@skane.se>
@@ -19,4 +19,4 @@ From: nfcore/base:1.9
     VERSION v0.0.1
 
 %help
-    This is container intended to be used by nextflow with the XXX pipeline.
+    This is container intended to be used by nextflow with the SCANB pipeline.
