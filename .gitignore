@@ -127,3 +127,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Containers
+*.sif
+
+# Nextflow related
+.nextflow*
+nextflow.config
+work/
+*#
