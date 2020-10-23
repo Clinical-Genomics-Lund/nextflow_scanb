@@ -1,15 +1,15 @@
 #!/usr/bin/env nextflow
+
 OUTDIR = params.outdir+'/'+params.subdir 
 
-
 csv = file(params.csv)
-// Print commit-version of active deployment
-//file(params.git)
-//    .readLines()
-//   .each { println "git commit-hash: "+it }
+//Print commit-version of active deployment
+file(params.git)
+    .readLines()
+   .each { println "git commit-hash: "+it }
 // Print active container
-//container = file(params.container).toRealPath()
-//println("container: "+container)
+container = file(params.container).toRealPath()
+println("container: "+container)
 
 
 workflow.onComplete {
@@ -48,8 +48,8 @@ Channel
 
 process  fastp{
     //preprocessing for FastQ files
+    publishDir "$OUTDIR/qc", mode :'copy'
     
-
     input:
         set val(sample_id), file(r1), file(r2) from reads
 
@@ -84,115 +84,128 @@ process bowtie2_filterfq{
 }
 */
 
-process  create_refidx_hisat2 {
+process create_refidx_hisat2{
     publishDir "${params.refpath}/hisat2_index", mode :'copy'
     cpus 16
     memory '160 GB'
-    //input:
-        
+    
     output:
-    file "*" into hisat2_ref
-   
+        file "*" into hisat2_ref
+    
+    when:
+        params.ht2ref
     
     script:
     """
     hisat2_extract_splice_sites.py $params.gtf > genome.ss 
     hisat2_extract_exons.py $params.gtf > genome.exon
     hisat2_extract_snps_haplotypes_UCSC.py ${params.genome} ${params.snp150} genome
-    hisat2-build -p ${task.cpus} --snp genome.snp --haplotype genome.haplotype --exon genome.exon --ss genome.ss ${params.genome} genom_snp_tran
-    
+    hisat2-build -p ${task.cpus} --snp genome.snp --haplotype genome.haplotype --exon genome.exon --ss genome.ss ${params.genome} genome_snp_tran
     """
 }
 
-/*
-
 process  hisat2_align{
-/*
---dta/--downstream-transcriptome-assembly
-Report alignments tailored for transcript assemblers including StringTie. 
-With this option, HISAT2 requires longer anchor lengths for de novo discovery of splice sites. This leads to fewer alignments with short-anchors,
- which helps transcript assemblers improve significantly in computation and memory usage.
---dta-cufflinks
-Report alignments tailored specifically for Cufflinks. In addition to what HISAT2 does with the above option (–dta), With this option, HISAT2 looks for novel 
-splice sites with three signals (GT/AG, GC/AG, AT/AC), 
-but all user-provided splice sites are used irrespective of their signals. HISAT2 produces an optional field, XS:A:[+-], for every spliced alignment.
-  
-cpus  16
-    input:
+    cpus 16
 
-         set val(sample_id), file(r1), file(r2) from  fastq_trimmed
+    input:
+        set val(sample_id), file(r1), file(r2) from  fastq_trimmed
+    
     output:
-        set val(sample_id), file("${sample_id}.trimmed.R1.fq.gz"), file("${sample_id}.trimmed.R2.fq.gz") into fastq_trimmed
+        set val(sample_id), file("${sample_id}.sam") into hs2_sam
 
     script:
     """
     hisat2 \\
-    -p ${task.cpus} \\
-    -q --fr --phred33 -t --dta --dta-cufflink --new-summary --no-unal --non-deterministic \\
-    --novel-splicesite-outfile aligned/splicesites.tsv \\
-    --rna-strandness RF \\
-    --summary-file aligned/summary.txt \\
-    --rg PL:Illumina \\
-    --rg CN:SCANB-prim \\
-    --rg-id SAMPLE.l.r.n.m.c.lib.g2 \\
-    --rg PU:HMTL5BGXF \\
-    --rg SM:SAMPLE \\
-    --rg LB:SAMPLE.l.r.n.m.c.lib \\
-    -x ${Tidx} \\
-    -1 masked/R1.fastq.gz \\
-    -2 masked/R2.fastq.gz \\
-    -S aligned/alignment.sam
+        -p ${task.cpus} \\
+        -q --fr --phred33 -t --dta --dta-cufflink --new-summary --no-unal --non-deterministic \\
+        --novel-splicesite-outfile aligned/splicesites.tsv \\
+        --rna-strandness RF \\
+        --summary-file aligned/summary.txt \\
+        --rg PL:Illumina \\
+        --rg CN:SCANB-prim \\
+        --rg-id SAMPLE.l.r.n.m.c.lib.g2 \\
+        --rg PU:HMTL5BGXF \\
+        --rg SM:SAMPLE \\
+        --rg LB:SAMPLE.l.r.n.m.c.lib \\
+        -x ${params.indxDir}/genom_snp_tran \\
+        -1 ${r1} \\
+        -2 ${r2} \\
+        -S ${sample_id}.sam
     """
 }
 
 process samtools_sort{
+    publishDir "$OUTDIR/bam", mode :'copy'
     cpus  16
+    
     input:
+        set val(sample_id), file(sam) from  hs2_sam
+    
     output:
+        set val(sample_id), file("${sample_id}.bam") into bam
+
     script:
-        """
-        samtools sort -@ ${task.cpus} -o aligned/alignment.bam -O bam -T aligned/tmp aligned/alignment.sam
-        """
+    """
+    samtools sort -@ ${task.cpus} -o ${sample_id}.bam -O bam -T ./tmp ${sam}
+    """
 }
 
 
 process  mark_duplicates{ 
-
+    container="/fs1/resources/containers/wgs_2020-03-25.sif"
+    publishDir "$OUTDIR/bam", mode :'copy'
+    
+    input:
+        set val(sample_id), file(bamfile) from bam
+    
+    output:
+        set val(sample_id), file("${sample_id}.markdup.bam") into bam_dup
+    
     script:
     """
-     java -Dpicard.useLegacyParser=false -Xmx${PicardMemory} -jar ${PicardDir}/picard.jar MarkDuplicates \\
-         -INPUT aligned/alignment.bam \\
-         -OUTPUT aligned/alignment.bam.tmp_picard \\
-         -METRICS_FILE aligned/alignment_picardmetrics.csv \\
+    java -Dpicard.useLegacyParser=false -Xms16G -Xmx16G -jar /opt/conda/envs/CMD-WGS/share/picard-2.21.2-1/picard.jar MarkDuplicates \\
+         -INPUT ${bamfile} \\
+         -OUTPUT ${sample_id}.alignment.bam.tmp_picard \\
+         -METRICS_FILE ${sample_id}.alignment_picardmetrics.csv \\
          -REMOVE_DUPLICATES false \\
          -ASSUME_SORTED true \\
          -MAX_FILE_HANDLES_FOR_READ_ENDS_MAP 2000 \\
          -QUIET true \\
          -VERBOSITY WARNING
-
-    mv -f aligned/alignment.bam.tmp_picard aligned/alignment.bam
+    mv  -f  ${sample_id}.alignment.bam.tmp_picard  ${sample_id}.markdup.bam
+    
     """
 }
-
 
 process samtools_index{
-
-    scripts:
+    publishDir "$OUTDIR/bam", mode :'copy'
+    
+    input:
+        set val(sample_id), file(bam) from bam_dup
+    
+    output:
+        set val(sample_id), file("${sample_id}.markdup.bam"), file("${sample_id}.markdup.bam.bai") into bambai
+    
+    script:
     """
-    samtools index -b aligned/alignment.bam aligned/alignment.bai
+    samtools index -b $bam ${bam}.bai
     """
 }
 
+
 process  stringtie{
+    cpus 16
     //Expression estimation using protein coding transcripts from GENCODE release 27 as transcriptome model. Novel transcripts are discarded.
+    publishDir "$OUTDIR/stringtie", mode :'copy' 
+    
+    input:
+        set val(sample_id), file(bam), file(bai) from  bambai
+
+    output:
+        set val(sample_id), file("${sample_id}.out.gtf"), file("${sample_id}.gene_abund.tsv"), file("${sample_id}.transcript_covered.gtf") into abund_ch
 
     script:
     """
-    stringtie -p ${NumThreads} -G ${GTF} -o stringtie/transcript.gtf -A stringtie/gene.tsv -C stringtie/transcript_covered.gtf --rf -B -e bam/alignment.bam
+    stringtie -p ${task.cpus} -G ${params.gtf} -o ${sample_id}.out.gtf -A ${sample_id}.gene_abund.tsv -C ${sample_id}.transcript_covered.gtf --rf -B -e ${bam}
     """
-
-
 }
-
-
-*/
