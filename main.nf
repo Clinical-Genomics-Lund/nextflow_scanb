@@ -4,13 +4,14 @@ OUTDIR = params.outdir+'/'+params.subdir
 
 csv = file(params.csv)
 //Print commit-version of active deployment
+/*
 file(params.git)
     .readLines()
    .each { println "git commit-hash: "+it }
 // Print active container
 container = file(params.container).toRealPath()
 println("container: "+container)
-
+*/
 
 workflow.onComplete {
 
@@ -65,8 +66,9 @@ process  fastp{
     """
 
 }
-
 /*
+
+
 process bowtie2_filterfq{
     cpus 16
 
@@ -106,6 +108,7 @@ process create_refidx_hisat2{
 
 process  hisat2_align{
     cpus 16
+    memory '64 GB'
 
     input:
         set val(sample_id), file(r1), file(r2) from  fastq_trimmed
@@ -154,6 +157,9 @@ process samtools_sort{
 process  mark_duplicates{ 
     container="/fs1/resources/containers/wgs_2020-03-25.sif"
     publishDir "$OUTDIR/bam", mode :'copy'
+    cpus 16
+    memory '32 GB'
+
     
     input:
         set val(sample_id), file(bamfile) from bam
@@ -163,7 +169,7 @@ process  mark_duplicates{
     
     script:
     """
-    java -Dpicard.useLegacyParser=false -Xms16G -Xmx16G -jar /opt/conda/envs/CMD-WGS/share/picard-2.21.2-1/picard.jar MarkDuplicates \\
+    java -Dpicard.useLegacyParser=false -Xms24G -Xmx24G -jar /opt/conda/envs/CMD-WGS/share/picard-2.21.2-1/picard.jar MarkDuplicates \\
          -INPUT ${bamfile} \\
          -OUTPUT ${sample_id}.alignment.bam.tmp_picard \\
          -METRICS_FILE ${sample_id}.alignment_picardmetrics.csv \\
@@ -193,8 +199,10 @@ process samtools_index{
 }
 
 
-process  stringtie{
+process  stringtie {
     cpus 16
+    memory '32 GB'
+    
     //Expression estimation using protein coding transcripts from GENCODE release 27 as transcriptome model. Novel transcripts are discarded.
     publishDir "$OUTDIR/stringtie", mode :'copy' 
     
