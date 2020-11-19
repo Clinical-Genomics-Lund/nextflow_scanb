@@ -4,14 +4,13 @@ OUTDIR = params.outdir+'/'+params.subdir
 
 csv = file(params.csv)
 //Print commit-version of active deployment
-/*
+
 file(params.git)
     .readLines()
    .each { println "git commit-hash: "+it }
 // Print active container
 container = file(params.container).toRealPath()
 println("container: "+container)
-*/
 
 workflow.onComplete {
 
@@ -48,6 +47,7 @@ Channel
 
 
 process  fastp{
+	tag "${sample_id}" 
     //preprocessing for FastQ files
     publishDir "$OUTDIR/qc", mode :'copy'
     
@@ -66,27 +66,29 @@ process  fastp{
     """
 
 }
-/*
 
-
-process bowtie2_filterfq{
+process bowtie2_filterfq {
+	tag "${sample_id}" 
     cpus 16
-
+    memory 40.GB 
+    
     when:
         params.filterFastqs
     input:
         set val(sample_id), file(r1), file(r2) from  fq_trimToFilter
     output:
     
-        set  val(sample_id), file(r1), file(r2) into fastq_filtered
+        set val(sample_id), file("${sample_id}.trimmed.filtered.R1.fastq.gz"), file("${sample_id}.trimmed.filtered.R2.fastq.gz") into fastq_filtered
+
     script:
         """
-        bowtie2 -p ${task.cpus} -q --fr -k 1 --phred33 -t --local --un-conc-gz masked/R%.fastq.gz  -x ${params.RMidx} -1 ${r1} -2 ${r2} -S /dev/null
+        bowtie2 -p ${task.cpus} -q --fr -k 1 --phred33 -t --local --un-conc-gz ${sample_id}.trimmed.filtered.R%.fastq.gz -x ${params.RMidx} -1 ${r1} -2 ${r2} -S /dev/null
         """
 }
-*/
+
 
 process create_refidx_hisat2{
+	tag "${sample_id}" 
     publishDir "${params.refpath}/hisat2_index", mode :'copy'
     cpus 16
     memory '160 GB'
@@ -106,15 +108,16 @@ process create_refidx_hisat2{
     """
 }
 
-process  hisat2_align{
+process  hisat2_align {
+	tag "${sample_id}" 
     cpus 16
     memory '64 GB'
 
     input:
-        set val(sample_id), file(r1), file(r2) from  fastq_trimmed
+        set val(sample_id), file(r1), file(r2) from  fastq_filtered
     
     output:
-        set val(sample_id), file("${sample_id}.sam") into hs2_sam
+        set val(sample_id), file("${sample_id}.hst2Aligned.sam") into hs2_sam
 
     script:
     """
@@ -133,11 +136,12 @@ process  hisat2_align{
         -x ${params.indxDir}/genom_snp_tran \\
         -1 ${r1} \\
         -2 ${r2} \\
-        -S ${sample_id}.sam
+        -S ${sample_id}.hst2Aligned.sam
     """
 }
 
 process samtools_sort{
+	tag "${sample_id}" 
     publishDir "$OUTDIR/bam", mode :'copy'
     cpus  16
     
@@ -145,16 +149,17 @@ process samtools_sort{
         set val(sample_id), file(sam) from  hs2_sam
     
     output:
-        set val(sample_id), file("${sample_id}.bam") into bam
+        set val(sample_id), file("${sample_id}.hst2Aligned.sorted.bam") into bam
 
     script:
     """
-    samtools sort -@ ${task.cpus} -o ${sample_id}.bam -O bam -T ./tmp ${sam}
+    samtools sort -@ ${task.cpus} -o ${sample_id}.hst2Aligned.sorted.bam -O bam -T ./tmp ${sam}
     """
 }
 
 
-process  mark_duplicates{ 
+process  mark_duplicates{
+	tag "${sample_id}" 
     container="/fs1/resources/containers/wgs_2020-03-25.sif"
     publishDir "$OUTDIR/bam", mode :'copy'
     cpus 16
@@ -184,6 +189,7 @@ process  mark_duplicates{
 }
 
 process samtools_index{
+	tag "${sample_id}" 
     publishDir "$OUTDIR/bam", mode :'copy'
     
     input:
@@ -198,8 +204,8 @@ process samtools_index{
     """
 }
 
-
 process  stringtie {
+	tag "${sample_id}" 
     cpus 16
     memory '32 GB'
     
