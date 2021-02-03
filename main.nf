@@ -48,11 +48,7 @@ Channel
     .map{row -> tuple(row.id,row.read1, row.read2,row.clarity_sample_id, row.clarity_pool_id)}
     .set{cdm_meta}	
 
-Channel
-    .fromPath(params.csv)
-    .splitCsv(header:true)
-    .map{ row-> tuple(row.id, file(row.read1), file(row.read2)) }
-    .set {reads}
+   
 
 Channel
     .fromPath(params.csv)
