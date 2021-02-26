@@ -1,0 +1,129 @@
+
+###########################################
+#	Johan Vallon-Christersson             #
+#	johan.vallon-christersson@med.lu.se   #
+###########################################
+
+
+####
+# function: applySSP
+#
+#	INPUT:
+#		- path to gene.tsv file from StingTie.
+#		- path to ssp model object
+#		- path to source directory
+#
+#	OUTPUT:
+#		- returns assigned class
+
+#	v1:	first implementation
+# 		only returns assigned class
+#	v1.1: :
+#		return posterior probabilities for classes and return a nice .png
+#	v1.2: :
+#		fix the issue with $isnumeric  
+# 		add mylas for las for plot
+			
+
+
+
+		#	# examples and manual stuff
+		#			
+		#		# specify input gene.tsv 
+		#			tsv <- "testdata/gene.tsv"
+		#
+		#		# specify input ssp 
+		#			ssp <- "testdata/Training_Run19081Genes_noNorm_SSP.subtypeMost.Fcc15_5x5foldCV.num.rules.50_24.selRules.AIMS.GS.RData"
+		#		
+		#		# specify sourcefiles folder
+		#			source <- "sourcefiles"
+		#							
+		#		# run function
+		#			myresults <- applySSP(tsv, ssp, source, report=TRUE)
+		#
+		#				head(myresults)
+			
+
+#####################################
+# function applySSP
+#####################################
+
+	# function
+	applySSP <- function(tsv, ssp, source, plot=TRUE, txt=TRUE, report=FALSE, add.is.num=TRUE, mylas=1){
+
+		# load required packages
+			library(caret)
+			library(gridExtra)
+			library(grid)
+			library(ggplot2)
+			library(reshape2)
+			require(e1071)
+	
+		# load SSP_functions
+			source(paste(source, "SSP_functions.R", sep="/"))
+		
+		# load functions for reading tsv and for translating id to entrez
+			source(paste(source, "read_StringTie_tsv_FPKM_v1.R", sep="/"))
+			source(paste(source, "translate_id2entrez_v1.R", sep="/"))
+
+		# load gene annotations
+			load(paste(source, "Gene.ID.ann.Rdata", sep="/"))				
+
+				if(report){
+					# report on Gene.ID.ann
+					cat("Gene.ID.ann nrow:",nrow(Gene.ID.ann),"\n")
+				}
+
+		# read tsv
+			mymatrix <- read_StringTie_tsv_FPKM(tsv, id=Gene.ID.ann$Gene.ID)
+				# head(mymatrix)
+			
+		# translate gene id
+			myid <- translate_id2entrez(id=rownames(mymatrix), ann=Gene.ID.ann, e=TRUE)
+
+		# load ssp model
+			load(ssp)	# loaded ssp object must be names aims.gs 
+
+			# fix issue with $isnumeric
+				if(add.is.num){
+					# add logi (aims.gs$ all.pairs), i.e, one TRUE for each aims.gs$ all.pairs
+					aims.gs$ one.vs.all.tsp[[aims.gs $ k]]$isnumeric[names(aims.gs$ one.vs.all.tsp[[aims.gs $ k]]$tables)] <- TRUE				
+				}#
+				
+		# apply ssp model
+			resultslist <- applyAIMS(mymatrix, myid, aims.gs)
+			
+			names(resultslist)
+
+			cl <- resultslist$cl[[1]]
+			all.probs <- c(resultslist$all.probs[[1]])
+				names(all.probs) <- colnames(resultslist$all.probs[[1]])
+			
+					if(report){
+						cat("assigned class:",cl,"\n")
+					}
+		if(plot){
+			
+			pdf(file="all.probs.pdf", width = 2.53, height = 1.19, pointsize = 6)
+				op <- par(oma=c(2,2,0,0), mar=c(2,2,1,0))
+					barplot(all.probs, las=mylas)
+					mtext("posterior probability", side=2, line=3, cex=0.9)
+					# mtext("class", side=1, line=2, cex=0.9)
+				par(op)
+			dev.off()
+			
+		}# end if plot
+		
+		if(txt){
+			
+			write.table(data.frame(all.probs), file=paste(args[2],"all.probs.txt",sep="."), col.names=FALSE, quote=FALSE, sep="\t")	
+			write.table(cl, file=paste(args[2],"class.txt",sep="."), col.names=FALSE, row.names=FALSE, quote=FALSE, sep="\t")			
+
+		}# end if txt
+		
+		return(cl)
+		
+	}# end function
+	
+#####################################
+#####################################
