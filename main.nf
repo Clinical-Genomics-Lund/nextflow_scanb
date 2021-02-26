@@ -85,14 +85,17 @@ workflow expr_workflow{
 		mark_duplicates(samtools_sort.out.bam)
 		samtools_index(mark_duplicates.out.bam_dup)
 		stringtie(samtools_index.out.bambai)
+		subtyping(stringtie.out.tsv)
+		ror(stringtie.out.tsv)
+		
 	emit:
-	stringtie.out
+	subtyping.out.gene_class
+	ror.out.gene_ror
 }
 
 workflow{
-	take:fastqs
+	
 	main:
-	fastqs.view()
 	expr_workflow()
 	qc_workflow()
     

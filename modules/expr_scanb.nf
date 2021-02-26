@@ -170,9 +170,42 @@ process  stringtie {
 
     output:
         tuple val(sample_id), file("${sample_id}.out.gtf"), file("${sample_id}.gene_abund.tsv"), file("${sample_id}.transcript_covered.gtf"), emit: abund_ch
+	tuple val(sample_id), file("${sample_id}.gene_abund.tsv"), emit: tsv
 
     script:
     """
     stringtie -p ${task.cpus} -G ${params.gtf} -o ${sample_id}.out.gtf -A ${sample_id}.gene_abund.tsv -C ${sample_id}.transcript_covered.gtf --rf -B -e ${bam}
     """
+}
+
+process  subtyping{
+	 tag "${sample_id}"
+	 publishDir "$OUTDIR/classification/ssp", mode :'copy'
+
+	 input:
+		tuple val(sample_id), file(tsv)
+	 
+	 output:
+		tuple val(sample_id),file("${sample_id}.class.txt"), file("${sample_id}.all.probs.txt"), emit:gene_class
+
+	 script:
+	 """
+	 Rscript $baseDir/bin/subtype.R ${tsv} ${sample_id}
+	 """	 
+}
+
+process  ror{
+	 tag "${sample_id}"
+	 publishDir "$OUTDIR/classification/ror", mode :'copy'
+	 
+	 input:
+		tuple val(sample_id), file(tsv)
+	 
+	 output:
+	         tuple val(sample_id),file("${sample_id}.class.txt"), file("${sample_id}.all.probs.txt"), file("${sample_id}.all.probs.pdf"), emit:gene_ror
+	
+         script:
+	  """
+	  Rscript $baseDir/bin/ror.R ${tsv} ${sample_id}
+	  """
 }
